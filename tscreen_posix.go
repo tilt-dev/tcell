@@ -128,12 +128,10 @@ func (t *tScreen) termioInit() error {
 	var newtios C.struct_termios
 	var fd C.int
 
-	if t.in == nil {
-		e = fmt.Errorf("t.in unexpectedly nil (should be populated)")
+	if t.in, e = os.OpenFile("/dev/tty", os.O_RDONLY, 0); e != nil {
 		goto failed
 	}
-	if t.out == nil {
-		e = fmt.Errorf("t.out unexpectedly nil (should be populated)")
+	if t.out, e = os.OpenFile("/dev/tty", os.O_WRONLY, 0); e != nil {
 		goto failed
 	}
 
