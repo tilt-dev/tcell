@@ -52,7 +52,7 @@ func makebox(s bcell.Screen) {
 
 	for row := 0; row < lh; row++ {
 		for col := 0; col < lw; col++ {
-			s.Setcell(lx+col, ly+row, st, gl)
+			s.SetCell(lx+col, ly+row, st, gl)
 		}
 	}
 	s.Show()
