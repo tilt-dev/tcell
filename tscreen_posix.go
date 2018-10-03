@@ -17,7 +17,7 @@
 package tcell
 
 import (
-	"os"
+	"fmt"
 	"os/signal"
 	"syscall"
 )
@@ -128,10 +128,12 @@ func (t *tScreen) termioInit() error {
 	var newtios C.struct_termios
 	var fd C.int
 
-	if t.in, e = os.OpenFile("/dev/tty", os.O_RDONLY, 0); e != nil {
+	if t.in == nil {
+		e = fmt.Errorf("t.in unexpectedly nil (should be populated)")
 		goto failed
 	}
-	if t.out, e = os.OpenFile("/dev/tty", os.O_WRONLY, 0); e != nil {
+	if t.out == nil {
+		e = fmt.Errorf("t.out unexpectedly nil (should be populated)")
 		goto failed
 	}
 
@@ -162,8 +164,6 @@ func (t *tScreen) termioInit() error {
 	if rv, e = C.tcsetattr(fd, C.TCSANOW|C.TCSAFLUSH, &newtios); rv != 0 {
 		goto failed
 	}
-
-	signal.Notify(t.sigwinch, syscall.SIGWINCH)
 
 	if w, h, e := t.getWinSize(); e == nil && w != 0 && h != 0 {
 		t.cells.Resize(w, h)

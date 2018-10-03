@@ -18,26 +18,32 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 	"unicode/utf8"
+
+	"github.com/yanzay/log"
 
 	"golang.org/x/text/transform"
 
 	"github.com/gdamore/tcell/terminfo"
 )
 
-// NewTerminfoScreen returns a Screen that uses the stock TTY interface
-// and POSIX termios, combined with a terminfo description taken from
-// the $TERM environment variable.  It returns an error if the terminal
-// is not supported for any reason.
+const defaultTtyPath = "/dev/tty"
+
+// NewTerminfoScreenFromTty returns a Screen pointing to the given TTY,
+// combined with a terminfo description taken from the terminal name
+// (found in the $TERM environment variable of the corresponding TTY).
+// It returns an error if the terminal is not supported for any reason.
 //
 // For terminals that do not support dynamic resize events, the $LINES
 // $COLUMNS environment variables can be set to the actual window size,
 // otherwise defaults taken from the terminal database are used.
-func NewTerminfoScreen() (Screen, error) {
-	ti, e := terminfo.LookupTerminfo(os.Getenv("TERM"))
+func NewTerminfoScreenFromTty(ttyPath string, sigwinch chan os.Signal, termName string) (Screen, error) {
+	ti, e := terminfo.LookupTerminfo(termName)
 	if e != nil {
 		return nil, e
 	}
@@ -56,7 +62,28 @@ func NewTerminfoScreen() (Screen, error) {
 		t.fallback[k] = v
 	}
 
+	if t.in, e = os.OpenFile(ttyPath, os.O_RDONLY, 0); e != nil {
+		t.Close()
+		return nil, e
+	}
+	if t.out, e = os.OpenFile(ttyPath, os.O_WRONLY, 0); e != nil {
+		t.Close()
+		return nil, e
+	}
+
+	if sigwinch == nil {
+		// No SIGWINCH channel passed, so make our own.
+		sigwinch = make(chan os.Signal, 10)
+		signal.Notify(t.sigwinch, syscall.SIGWINCH)
+	}
+	t.sigwinch = sigwinch
+
 	return t, nil
+}
+
+// NewTerminfoScreen returns a Screen for the current TTY.
+func NewTerminfoScreen() (Screen, error) {
+	return NewTerminfoScreenFromTty(defaultTtyPath, nil, os.Getenv("TERM"))
 }
 
 // tKeyCode represents a combination of a key code and modifiers.
@@ -175,6 +202,22 @@ func (t *tScreen) Init() error {
 	go t.mainLoop()
 	go t.inputLoop()
 
+	return nil
+}
+
+func (t *tScreen) Close() error {
+	if t.in != nil {
+		err := t.in.Close()
+		if err != nil {
+			log.Printf("Closing tScreen.in: %v", err)
+		}
+	}
+	if t.out != nil {
+		err := t.out.Close()
+		if err != nil {
+			log.Printf("Closing tScreen.out: %v", err)
+		}
+	}
 	return nil
 }
 
